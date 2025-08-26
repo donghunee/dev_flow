@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>사용자 관리 시스템</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      .form-group input,
+      select {
+        width: 100%;
+        padding: 8px;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        cursor: pointer;
+      }
+      .btn-primary {
+        background: #007bff;
+        color: white;
+        border: none;
+      }
+      .btn-danger {
+        background: #dc3545;
+        color: white;
+        border: none;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 12px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      .error {
+        color: red;
+        margin-top: 10px;
+      }
+      .success {
+        color: green;
+        margin-top: 10px;
+      }
+      .loading {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>사용자 관리 시스템</h1>
+
+      <!-- 사용자 생성 폼 -->
+      <div id="user-form">
+        <h2>새 사용자 추가</h2>
+        <form id="create-user-form">
+          <div class="form-group">
+            <label for="name">이름:</label>
+            <input type="text" id="name" name="name" required />
+          </div>
+          <div class="form-group">
+            <label for="email">이메일:</label>
+            <input type="email" id="email" name="email" required />
+          </div>
+          <div class="form-group">
+            <label for="role">역할:</label>
+            <select id="role" name="role">
+              <option value="user">사용자</option>
+              <option value="admin">관리자</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-primary">사용자 추가</button>
+          <button
+            type="button"
+            id="cancel-edit"
+            style="display: none"
+            class="btn-secondary"
+          >
+            취소
+          </button>
+        </form>
+        <div id="form-message"></div>
+      </div>
+
+      <!-- 검색 및 필터 -->
+      <div id="search-section">
+        <h2>사용자 검색</h2>
+        <div class="form-group">
+          <label for="search-role">역할별 검색:</label>
+          <select id="search-role">
+            <option value="">전체</option>
+            <option value="user">사용자</option>
+            <option value="admin">관리자</option>
+          </select>
+          <button id="search-btn" class="btn-primary">검색</button>
+        </div>
+      </div>
+
+      <!-- 로딩 표시 -->
+      <div id="loading" class="loading">로딩 중...</div>
+
+      <!-- 사용자 목록 -->
+      <div id="users-section">
+        <h2>사용자 목록</h2>
+        <table id="users-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>이름</th>
+              <th>이메일</th>
+              <th>역할</th>
+              <th>작업</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- 페이지네이션 -->
+      <div id="pagination">
+        <button id="prev-page" class="btn-secondary">이전</button>
+        <span id="page-info">페이지 1</span>
+        <button id="next-page" class="btn-secondary">다음</button>
+      </div>
+    </div>
+
+    <script>
+      // 전역 변수
+      let currentPage = 1;
+      let currentRole = '';
+      let editingUserId = null;
+
+      // API 호출 함수들
+      async function fetchUsers(page = 1, role = '') {
+        showLoading(true);
+        try {
+          const queryParams = new URLSearchParams({ page, limit: 10 });
+          if (role) queryParams.append('role', role);
+
+          const response = await fetch(`/api/users?${queryParams}`);
+          const data = await response.json();
+
+          if (data.success) {
+            displayUsers(data.data.users);
+            updatePagination(data.data.pagination);
+          }
+        } catch (error) {
+          showMessage('사용자 목록을 불러오는데 실패했습니다', 'error');
+        } finally {
+          showLoading(false);
+        }
+      }
+
+      async function createUser(userData) {
+        showLoading(true);
+        try {
+          const response = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            showMessage('사용자가 성공적으로 추가되었습니다', 'success');
+            document.getElementById('create-user-form').reset();
+            fetchUsers(currentPage, currentRole);
+          } else {
+            showMessage(data.error.message, 'error');
+          }
+        } catch (error) {
+          showMessage('사용자 추가에 실패했습니다', 'error');
+        } finally {
+          showLoading(false);
+        }
+      }
+
+      async function updateUser(id, userData) {
+        showLoading(true);
+        try {
+          const response = await fetch(`/api/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            showMessage('사용자가 성공적으로 수정되었습니다', 'success');
+            cancelEdit();
+            fetchUsers(currentPage, currentRole);
+          } else {
+            showMessage(data.error.message, 'error');
+          }
+        } catch (error) {
+          showMessage('사용자 수정에 실패했습니다', 'error');
+        } finally {
+          showLoading(false);
+        }
+      }
+
+      async function deleteUser(id) {
+        if (!confirm('정말 삭제하시겠습니까?')) return;
+
+        showLoading(true);
+        try {
+          const response = await fetch(`/api/users/${id}`, {
+            method: 'DELETE',
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            showMessage('사용자가 성공적으로 삭제되었습니다', 'success');
+            fetchUsers(currentPage, currentRole);
+          } else {
+            showMessage(data.error.message, 'error');
+          }
+        } catch (error) {
+          showMessage('사용자 삭제에 실패했습니다', 'error');
+        } finally {
+          showLoading(false);
+        }
+      }
+
+      // UI 업데이트 함수들
+      function displayUsers(users) {
+        const tbody = document.getElementById('users-tbody');
+        tbody.innerHTML = '';
+
+        users.forEach((user) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+                    <td>${user.id}</td>
+                    <td>${user.name}</td>
+                    <td>${user.email}</td>
+                    <td>${user.role}</td>
+                    <td>
+                        <button class="btn-primary" onclick="editUser(${user.id})">수정</button>
+                        <button class="btn-danger" onclick="deleteUser(${user.id})">삭제</button>
+                    </td>
+                `;
+          tbody.appendChild(row);
+        });
+      }
+
+      function updatePagination(pagination) {
+        document.getElementById(
+          'page-info'
+        ).textContent = `페이지 ${pagination.page} / ${pagination.totalPages}`;
+        document.getElementById('prev-page').disabled = pagination.page <= 1;
+        document.getElementById('next-page').disabled =
+          pagination.page >= pagination.totalPages;
+      }
+
+      function showLoading(show) {
+        document.getElementById('loading').style.display = show
+          ? 'block'
+          : 'none';
+      }
+
+      function showMessage(message, type) {
+        const messageDiv = document.getElementById('form-message');
+        messageDiv.className = type;
+        messageDiv.textContent = message;
+        setTimeout(() => (messageDiv.textContent = ''), 5000);
+      }
+
+      async function editUser(id) {
+        try {
+          const response = await fetch(`/api/users/${id}`);
+          const data = await response.json();
+
+          if (data.success) {
+            const user = data.data.user;
+            document.getElementById('name').value = user.name;
+            document.getElementById('email').value = user.email;
+            document.getElementById('role').value = user.role;
+
+            editingUserId = id;
+            document.getElementById('cancel-edit').style.display =
+              'inline-block';
+            document.querySelector('form button[type="submit"]').textContent =
+              '수정';
+          }
+        } catch (error) {
+          showMessage('사용자 정보를 불러오는데 실패했습니다', 'error');
+        }
+      }
+
+      function cancelEdit() {
+        editingUserId = null;
+        document.getElementById('create-user-form').reset();
+        document.getElementById('cancel-edit').style.display = 'none';
+        document.querySelector('form button[type="submit"]').textContent =
+          '사용자 추가';
+      }
+
+      // 이벤트 리스너 설정
+      document
+        .getElementById('create-user-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+
+          const formData = new FormData(e.target);
+          const userData = {
+            name: formData.get('name'),
+            email: formData.get('email'),
+            role: formData.get('role'),
+          };
+
+          if (editingUserId) {
+            await updateUser(editingUserId, userData);
+          } else {
+            await createUser(userData);
+          }
+        });
+
+      document
+        .getElementById('cancel-edit')
+        .addEventListener('click', cancelEdit);
+
+      document.getElementById('search-btn').addEventListener('click', () => {
+        currentRole = document.getElementById('search-role').value;
+        currentPage = 1;
+        fetchUsers(currentPage, currentRole);
+      });
+
+      document.getElementById('prev-page').addEventListener('click', () => {
+        if (currentPage > 1) {
+          currentPage--;
+          fetchUsers(currentPage, currentRole);
+        }
+      });
+
+      document.getElementById('next-page').addEventListener('click', () => {
+        currentPage++;
+        fetchUsers(currentPage, currentRole);
+      });
+
+      // 초기 로드
+      fetchUsers();
+    </script>
+  </body>
+</html>
