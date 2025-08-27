@@ -2,8 +2,10 @@
 
 /**
  * 이메일 주소 유효성 검증
+ * @param {string} email - 검증할 이메일 주소
+ * @returns {boolean} 유효한 이메일인지 여부
  */
-function isValidEmail(email) {
+function validateEmail(email) {
   if (!email || typeof email !== 'string') {
     return false;
   }
@@ -17,13 +19,19 @@ function isValidEmail(email) {
   // 연속된 점은 잘못된 형식으로 간주
   if (trimmed.includes('..')) return false;
 
+  // 이메일 길이 제한
+  if (trimmed.length > 254) return false;
+
   return true;
 }
 
 /**
  * 비밀번호 강도 검증
+ * 최소 8자, 대문자, 소문자, 숫자, 특수문자 포함
+ * @param {string} password - 검증할 비밀번호
+ * @returns {boolean} 유효한 비밀번호인지 여부
  */
-function isStrongPassword(password) {
+function validatePassword(password) {
   if (!password || typeof password !== 'string') {
     return false;
   }
@@ -73,13 +81,41 @@ function isValidDateRange(startDate, endDate) {
     return false;
   }
 
-  // 시작일이 종료일보다 이전이어야 함
-  return start <= end;
+/**
+ * 사용자 이름 검증
+ * @param {string} name - 검증할 이름
+ * @returns {boolean} 유효한 이름인지 여부
+ */
+function validateName(name) {
+  if (!name || typeof name !== 'string') return false;
+  
+  const trimmedName = name.trim();
+  return trimmedName.length >= 2 && trimmedName.length <= 50;
+}
+
+/**
+ * 입력값 보안 검증 (SQL 인젝션 방지)
+ * @param {string} input - 검사할 입력값
+ * @returns {boolean} 안전한 입력값인지 여부
+ */
+function isSafeInput(input) {
+  if (typeof input !== 'string') return false;
+  
+  const dangerousPatterns = [
+    /('|(\\')|(;)|(\\)|(union)|(select)|(insert)|(delete)|(update)|(drop)|(exec)|(execute)/i
+  ];
+  
+  return !dangerousPatterns.some(pattern => pattern.test(input));
 }
 
 module.exports = {
-  isValidEmail,
-  isStrongPassword,
+  validateEmail,
+  validatePassword,
+  validateName,
+  isSafeInput,
   formatPhoneNumber,
   isValidDateRange,
+  // 기존 함수들과의 호환성을 위해 별칭 제공
+  isValidEmail: validateEmail,
+  isStrongPassword: validatePassword
 };
