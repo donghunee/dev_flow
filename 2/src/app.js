@@ -183,6 +183,12 @@ app.delete('/api/users/:id', (req, res) => {
   });
 });
 
+if (process.env.NODE_ENV === 'test') {
+  app.get('/__test/error', (req, res) => {
+    throw new Error('simulated failure');
+  });
+}
+
 // 에러 핸들러
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -196,7 +202,15 @@ app.use((err, req, res, next) => {
 });
 
 // 404 핸들러
-app.use((req, res) => {
+app.use((req, res, next) => {
+  if (
+    process.env.NODE_ENV === 'test' &&
+    req.path &&
+    req.path.startsWith('/__test')
+  ) {
+    return next();
+  }
+
   res.status(404).json({
     success: false,
     error: {
